@@ -1,0 +1,277 @@
+---
+title: "Marijuana Missing Analysis"
+author: Allison Poehler
+output: html_notebook
+---
+
+#bring in BRFSS 2016 data
+```{r}
+#install SASxport package
+#install.packages("SASxport")
+library(SASxport)
+
+#load BRFSS 2016 data file from CDC
+#public dataset located at https://www.cdc.gov/brfss/annual_data/annual_2016.html
+#dataset is in SAS transport file format
+
+brfss <- read.xport("C:/Users/Allie/Documents/Wash U MPH/Spring 2018/ADA/LLCP2016.XPT", force.integer=T, formats=NULL, name.chars=NULL, names.tolower=F, keep=NULL, drop=NULL, as.is=0.95, verbose=F, as.list=F, include.formats=F)
+
+#n=486,303 and 275 variables. 
+```
+
+#data management
+```{r}
+#get list of variable names
+names(brfss)
+
+#drop unneeded variables using subset function and keep only observations from states that used the marijuana modules: Alaska, Colorado, Florida, Idaho, Minnesota, Mississippi, Nebraska, Ohio, Teneesee, Wyoming, Oklahoma, California
+brfss_m <- subset(brfss, X.STATE==2 | X.STATE==8 | X.STATE==12 | X.STATE==16 | X.STATE==27 | X.STATE==28 | X.STATE==31 | X.STATE==39 | X.STATE==47 | X.STATE==56 | X.STATE==40 | X.STATE==6, select = c("X.STATE","GENHLTH", "PHYSHLTH", "MENTHLTH", "POORHLTH","HLTHPLN1", "MEDCOST", "CVDINFR4" , "CVDCRHD4" , "CVDSTRK3" ,"ASTHMA3", "ASTHNOW", "CHCSCNCR","CHCOCNCR", "CHCCOPD1", "HAVARTH3", "ADDEPEV2", "CHCKIDNY", "DIABETE3", "DIABAGE2" , "SEX" , "EMPLOY1", "PREGNANT" ,  "DECIDE" ,  "HIVRISK4", "PAINACT2", "QLMENTL2", "QLSTRES2" , "QLHLTH2" , "MEDICARE", "HLTHCVR1", "DELAYMED", "NOCOV121" , "MEDSCOST", "CIMEMLOS", "MARIJANA", "USEMRJNA", "ASNOSLEP", "QLACTLM2", "QSTLANG", "X.RACE", "X.AGEG5YR", "X.EDUCAG",  "X.INCOMG", "X.SMOKER3", "X.RFDRHV5", "X.DRNKDRV")) 
+
+#n=138,605 and 47 variables
+
+#check to make sure only the 12 states are included in the brfss_m dataset
+library(gmodels)
+CrossTable(brfss_mm$X.STATE)
+```
+
+#conduct a one to many merge using dataset that contains marijuana legalization status of states
+```{r}
+#bring in marijuana legalization status by state spreadsheet
+library(xlsx)
+library(rJava)
+library(xlsxjars)
+
+marijuana_legal <- read.xlsx(file="C:/Users/Allie/Documents/Wash U MPH/Spring 2018/ADA/marijuana_legal_state.xlsx", sheetName="Sheet1",header=T,  rowIndex=NULL,startRow=1, endRow=51, 
+                         colIndex=NULL,as.data.frame=TRUE) 
+```
+
+```{r}
+#conduct the merge 
+library(plyr)
+brfss_mm <- join(brfss_m, marijuana_legal, by='X.STATE', type='left', match='all')
+
+#n=473,813 and 50 variables
+
+```
+
+#descriptive stats
+```{r}
+#number of respondants in states depending on marijuana legal status
+count(brfss_mm$legal)
+```
+```{r}
+#total NAs on marijuana use in past 30 days
+sum(is.na(brfss_mm$MARIJANA))
+
+library(gmodels)
+CrossTable(brfss_mm$X.STATE, brfss_mm$legal)
+CrossTable(brfss_mm$legal, brfss_mm$SEX)
+CrossTable(brfss_mm$legal, brfss_mm$PREGNANT)
+CrossTable(brfss_mm$legal, brfss_mm$X.SMOKER3)
+CrossTable(brfss_mm$legal, brfss_mm$X.INCOMG)
+CrossTable(brfss_mm$legal, brfss_mm$X.EDUCAG)
+CrossTable(brfss_mm$X.AGEG5YR, brfss_mm$legal)
+CrossTable(brfss_mm$X.RACE,brfss_mm$legal)
+CrossTable(brfss_mm$EMPLOY1, brfss_mm$legal)
+```
+
+```{r}
+library(labelled)
+View(brfss_mm$MARIJANA)
+val_labels(brfss_mm$MARIJANA)
+levels(brfss_mm$MARIJANA)
+#install.packages("sjlabelled")
+#install.packages("bindrcpp")
+library(sjlabelled)
+get_label(brfss_mm$MARIJANA) #variable label is "during thepast 30 days, on how many day" 
+get_values(brfss_mm$MARIJANA) #values given as NULL
+get_labels(brfss_mm$MARIJANA) #value labels given as NULL
+get_values(brfss_mm$MARIJANA) #returns as NULL
+#what are the value labels for this variable
+#as_label(brfss_mm$MARIJANA) #only returns NAs
+
+#get_na(brfss_mm$MARIJANA, as.tag=T) #this sends all values to na
+brfss_mm$mmissing <- as_factor(brfss_mm$MARIJANA)
+
+class(brfss_mm$missing)
+print(brfss_mm$mmissing) #actual values NA, levels 1-30, 77, 88, 99
+View(brfss_mm$MARIJANA)
+
+brfss_mm$mmissing <- brfss_mm$MARIJANA
+View(brfss_mm$mmissing)
+#R is being really touchy so I'm going to have to recode like this because it took me 8 hours to get this to do this after several crashes
+brfss_mm$mmissing[which(brfss_mm$mmissing=="1")] <- "0" 
+brfss_mm$mmissing[which(brfss_mm$mmissing=="2")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="3")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="4")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="5")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="6")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="7")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="8")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="9")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="10")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="11")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="12")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="13")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="14")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="15")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="16")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="17")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="18")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="19")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="20")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="21")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="22")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="23")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="24")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="25")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="26")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="27")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="28")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="29")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="30")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="77")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="88")] <- "0"
+brfss_mm$mmissing[which(brfss_mm$mmissing=="99")] <- "0"
+brfss_mm$mmissing[which(is.na(brfss_mm$mmissing))] <- "1"
+
+sum(is.na(brfss_mm$mmissing)) #R recognizes this as missing with this command
+
+
+# R won't recongize blanks as missing within the labelled data class
+
+CrossTable(brfss_mm$mmissing, brfss_mm$legal, na.rm=T) #R is not recognizing the missing values are a part of the dataset, n=106,820 here and if you count the missing n=366,993 then overall n=473,813
+
+#after hours of work, it works
+CrossTable(brfss_mm$mmissing, brfss_mm$legal)
+```
+```{r}
+#check assumptions for logistic regression
+#linearity, not tested as the IV is categorical
+
+#Cook's distance
+logit1<-glm(mmissing ~ legal, data=brfss_mm, family="binomial") 
+  plot(logit1, which=4, id.n=5, col="red") #may have some outliers
+  
+xt<-table(round(predict(logit1, type="response")), logit1$model$mmissing) 
+  xt #Note the Gold standard (reporting by participant) is the column variable and the model prediction is the row variable. 
+     #Can you calculate sensitivity and specificity of the model for predicting diabetes?
+xt2<- xt/sum(xt)
+  xt2
+  p<-sum(diag(xt2))
+  p #proportion of missing correctly classified by the model
+```
+
+```{r}
+#conduct logistic regression for unadjusted
+#View(brfss_mm$mmissing)
+brfss_mm$mmissing[] <- lapply(brfss_mm$mmissing, unclass)
+class(brfss_mm$mmissing)
+brfss_mm$mmissing <- as.numeric(brfss_mm$mmissing)
+#View(brfss_mm$mmissing)
+class(brfss_mm$legal)
+brfss_mm$legal <- as.character(brfss_mm$legal)
+View(brfss_mm$legal)
+model1 <- glm(mmissing ~ legal, data=brfss_mm, family="binomial")
+summary(model1)
+
+ORmodel1<-exp(cbind(OR = coef(model1), confint(model1))) #calculate ORs and 95% CIs
+  ORmodel1
+
+```
+
+```{r}
+brfss_mm$X.STATE[] <- lapply(brfss_mm$X.STATE, unclass)
+brfss_mm$X.STATE <- as.character(brfss_mm$X.STATE)
+model1 <- glm(mmissing ~ legal + X.STATE, data=brfss_mm, family="binomial")
+summary(model1)
+
+ORmodel1<-exp(cbind(OR = coef(model1), confint(model1))) #calculate ORs and 95% CIs
+  ORmodel1
+```
+
+```{r}
+#conduct logistic regression with adjustment
+brfss_mm$X.EDUCAG[]<-lapply(brfss_mm$X.EDUCAG, unclass)
+brfss_mm$X.INCOMG[]<-lapply(brfss_mm$X.INCOMG, unclass)
+brfss_mm$EMPLOY1[] <-lapply(brfss_mm$EMPLOY1, unclass)
+brfss_mm$EMPLOY1<- as.character(brfss_mm$EMPLOY1)
+brfss_mm$X.EDUCAG<- as.character(brfss_mm$X.EDUCAG)
+brfss_mm$X.INCOMG<- as.character(brfss_mm$X.INCOMG)
+class(brfss_mm$EMPLOY1)
+class(brfss_mm$X.EDUCAG)
+class(brfss_mm$X.INCOMG)
+class(brfss_mm$mmissing)
+
+
+
+model2 <- glm(mmissing ~ legal +  X.INCOMG, data=brfss_mm, family="binomial")
+summary(model2)
+ORmodel2<-exp(cbind(OR = coef(model2), confint(model2)))
+  ORmodel2
+
+
+```
+
+```{r}
+
+brfss_mm$X.EDUCAG[]<-lapply(brfss_mm$X.EDUCAG, unclass)
+brfss_mm$EMPLOY1[] <-lapply(brfss_mm$EMPLOY1, unclass)
+brfss_mm$EMPLOY1<- as.character(brfss_mm$EMPLOY1)
+brfss_mm$X.EDUCAG<- as.character(brfss_mm$X.EDUCAG)
+brfss_mm$X.INCOMG<- as.character(brfss_mm$X.INCOMG)
+brfss_mm$SEX <-as.character(brfss_mm$SEX)
+brfss_mm$X.RACE<- as.character(brfss_mm$X.RACE)
+brfss_mm$X.AGEG5YR <-as.character(brfss_mm$X.AGEG5YR)
+class(brfss_mm$EMPLOY1)
+class(brfss_mm$X.EDUCAG)
+class(brfss_mm$X.INCOMG)
+class(brfss_mm$mmissing)
+
+
+model3 <- glm(mmissing ~ legal + X.RACE+  X.INCOMG, data=brfss_mm, family="binomial")
+summary(model3)
+ORmodel3<-exp(cbind(OR = coef(model3), confint(model3)))
+  ORmodel3
+  
+```
+
+```{r}
+  model4 <- glm(mmissing ~ legal + SEX, data=brfss_mm, family="binomial")
+summary(model4)
+ORmodel4<-exp(cbind(OR = coef(model4), confint(model4)))
+  ORmodel4
+
+```
+```{r}
+model5 <- glm(mmissing ~ legal + X.RACE, data=brfss_mm, family="binomial")
+summary(model5)
+ORmodel5<-exp(cbind(OR = coef(model5), confint(model5)))
+  ORmodel5
+```
+
+```{r}
+model6 <- glm(mmissing ~ legal + X.AGEG5YR, data=brfss_mm, family="binomial")
+summary(model6)
+ORmodel6 <-exp(cbind(OR = coef(model6), confint(model6)))
+  ORmodel6
+```
+
+```{r}
+model7 <- glm(mmissing ~ legal + X.EDUCAG, data=brfss_mm, family="binomial")
+summary(model7)
+ORmodel7<-exp(cbind(OR = coef(model7), confint(model7)))
+  ORmodel7
+```
+
+```{r}
+model8 <- glm(mmissing ~ legal + EMPLOY1, data=brfss_mm, family="binomial")
+summary(model8)
+ORmodel8<-exp(cbind(OR = coef(model8), confint(model8)))
+  ORmodel8
+```
+
+
+
+
+
